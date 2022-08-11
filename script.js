@@ -6,10 +6,15 @@ var currentActiveSpeaker = "";
 let scenary = document.getElementsByClassName("Scenary")[0];
 // create dish
 let dish = new Dish(scenary);
+dish.append();
 let stateScenary = 1;
 let backendURL = "http://localhost:4000";
 var socket = io(backendURL);
 axios.defaults.baseURL = backendURL;
+let test = {
+    id: '',
+    streamTrack: ''
+}
 
 $("#joinPrivate").on("click", () => {
     if ($("#joinPrivate").prop("checked") == true) {
@@ -301,7 +306,7 @@ $("#joinMeetingButton").on("click", async function () {
         $("#waitingArea").addClass("hidden");
         $("#meetingView").removeClass("hidden");
 
-        dish.join(meeting.participantSessionId, username);
+        // dish.join(meeting.participantSessionId, username);
         participantName = username;
 
         if (cameraOn) {
@@ -399,23 +404,35 @@ meeting.on("localTrackStarted", function (trackItem) {
     if (trackItem.type === "video") {
         let track = trackItem.track;
         let mediaStream = new MediaStream([track]);
-
-        $(`#participant-${meeting.participantSessionId}-video`)[0].srcObject = mediaStream;
-        $(`#participant-${meeting.participantSessionId}-video`)[0].play();
+        console.log("EVENT LOCAL TRACK STARTED.....");
+        console.log(meeting.participantSessionId);
+        if ($(`#participant-${meeting.participantSessionId}-video`)[0] != null) {
+            $(`#participant-${meeting.participantSessionId}-video`)[0].srcObject = mediaStream;
+            $(`#participant-${meeting.participantSessionId}-video`)[0].play();
+        } 
+        dish.addStreamTrack(meeting.participantSessionId, track, 'video', false);
+        
     }
 });
 meeting.on("localTrackUpdated", function (trackItem) {
     if (trackItem.type === "video") {
         let track = trackItem.track;
         let mediaStream = new MediaStream([track]);
-        $(`#participant-${meeting.participantSessionId}-video`)[0].srcObject = mediaStream;
+        console.log("EVENT LOCAL TRACK UPDATED.....");
+        console.log(meeting.participantSessionId);
+        if ($(`#participant-${meeting.participantSessionId}-video`)[0] != null) {
+            $(`#participant-${meeting.participantSessionId}-video`)[0].srcObject = mediaStream;
+        } 
+        dish.addStreamTrack(meeting.participantSessionId, track, 'video', false);
     }
 });
 
 meeting.on("localTrackStopped", function (localTrackItem) {
     console.log(localTrackItem.type);
     console.log(localTrackItem);
-    if (localTrackItem.type === "video") {
+    console.log("EVENT LOCAL TRACK STOPPED.....");
+    console.log(meeting.participantSessionId);
+    if (localTrackItem.type === "video" && $(`#participant-${meeting.participantSessionId}-video`)[0] != null) {
         $(`#participant-${meeting.participantSessionId}-video`)[0].srcObject = null;
     }
 });
@@ -426,18 +443,28 @@ meeting.on("remoteTrackStarted", function (trackItem) {
     if (trackItem.participantSessionId === meeting.participantSessionId) return;
     var track = trackItem.track;
     var mediaStream = new MediaStream([track]);
-    $(`#participant-${trackItem.participantSessionId}-${trackItem.type}`)[0].srcObject = mediaStream;
-    $(`#participant-${trackItem.participantSessionId}-${trackItem.type}`)[0].play();
+    console.log("EVENT REMOTE TRACK STARTED ....");
+    console.log(trackItem.participantSessionId);
+    console.log(track);
+    console.log(mediaStream);
+    if ($(`#participant-${trackItem.participantSessionId}-${trackItem.type}`)[0] != null) {
+        $(`#participant-${trackItem.participantSessionId}-${trackItem.type}`)[0].srcObject = mediaStream;
+        $(`#participant-${trackItem.participantSessionId}-${trackItem.type}`)[0].play();
+    }
+    dish.addStreamTrack(trackItem.participantSessionId, track, trackItem.type, true);
 });
 
 meeting.on("remoteTrackStopped", function (trackItem) {
     if (trackItem.participantSessionId === meeting.participantSessionId) return;
+    console.log("EVENT REMOTE TRACK STOPPED...");
+    console.log(meeting.participantSessionId);
     if ($(`#participant-${trackItem.participantSessionId}-${trackItem.type}`)[0] != null) {
         $(`#participant-${trackItem.participantSessionId}-${trackItem.type}`)[0].srcObject = null;
     }
 });
 
 meeting.on("participantJoined", function (participantInfo) {
+    console.log("EVENT PARTICIPANT JOINED ....");
     if (participantInfo._id != meeting.participantSessionId) {
         dish.join(participantInfo._id, participantInfo.name);
     }
@@ -449,10 +476,13 @@ meeting.on("participantLeft", function (participantInfo) {
 });
 
 meeting.on("onlineParticipants", function (onlineParticipants) {
+    console.log("EVENT ONLINE PARTICIPANT ===============");
+    console.log(onlineParticipants.length);
     for (let participantInfo of onlineParticipants) {
-        if (participantInfo._id !== meeting.participantSessionId) {
-            dish.join(participantInfo._id, participantInfo.name)
-        }
+        // if (participantInfo._id !== meeting.participantSessionId) {
+        //     dish.join(participantInfo._id, participantInfo.name)
+        // }
+        dish.join(participantInfo._id, participantInfo.name)
     }
 });
 
@@ -460,7 +490,7 @@ meeting.on("onlineParticipants", function (onlineParticipants) {
 // meeting.on("activeSpeaker", function (activeSpeaker) {
 // });
 
-
+let id = 0;
 $("#meetingViewLeave").on("click", async function () {
     socket.emit('leave room', meetingId);
     await meeting.leaveMeeting();
@@ -468,14 +498,21 @@ $("#meetingViewLeave").on("click", async function () {
     $("#leaveView").removeClass("hidden");
 });
 
+// let leftid = 7;
+// $("#test-left").on("click", async function () {
+//     -- leftid;
+//     console.log(`${leftid} has left`)
+//     dish.left(leftid);
+// });
+
+$("#pagination-left").on("click", async function () {
+    dish.updatePage(dish._curPage - 1);
+});
+$("#pagination-right").on("click", async function () {
+    dish.updatePage(dish._curPage + 1);
+});
+
 window.addEventListener("load", function () {
-    console.log("HELLO ==================");
-    // render dish
-    dish.append();
-
-    // resize the cameras
-    dish.resize();
-
     // resize event of window
     window.addEventListener("resize", function () {
         // resize event to dimension cameras
@@ -516,7 +553,6 @@ $(".chatbox-message-form").submit((e) => {
 	e.preventDefault()
 	if(isValid(textarea.value)) {
 		writeMessage()
-		// setTimeout(autoReply, 1000)
 	}
 })
 
@@ -544,28 +580,11 @@ function writeMessage() {
 	textarea.rows = 1
 	textarea.focus()
 	textarea.value = ''
-    console.log("000000000000000")
 	chatboxNoMessage.style.display = 'none'
 	scrollBottom()
 }
 
 
-
-function autoReply() {
-	const today = new Date()
-	let message = `
-		<div class="chatbox-message-item received">
-            <div style="color: green;">Nguyen Van Khoa</div>
-			<span class="chatbox-message-item-text">
-				Thank you for your awesome support!
-			</span>
-			<span class="chatbox-message-item-time">${addZero(today.getHours())}:${addZero(today.getMinutes())}</span>
-		</div>
-	`
-	chatboxMessageWrapper.insertAdjacentHTML('beforeend', message)
-    scrollBottom();
-	
-}
 $("#scrollDown").on("click", () => {
 	scrollBottom();
 })
